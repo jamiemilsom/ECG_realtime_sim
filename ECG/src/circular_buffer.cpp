@@ -16,6 +16,7 @@ std::vector<float> ecg_data;    // Stores the ECG data read from file (not used 
 const int filter_order = 4;                     // 4th order filter
 const float cutoff_frequency = 50.0f;           // Hz (EMG / Power line removal)
 const float highpass_cutoff_frequency = 0.1f;   // Hz (baseline wander removal)
+const float lowpass_cutoff_frequency = 100.0f;  // Hz (for noise removal)
 
 // circlular buffer
 const int BUFFER_SIZE = 4*SAMPLING_RATE;    // stores 4 seconds of data (assuming min HR 30 this should always have 2 beats)
@@ -42,12 +43,14 @@ bool read_ecg_data(const std::string& filename) {
     return true;
 }
 
-float HighPassThenBandpass(Iir::Butterworth::BandPass<filter_order>& bandpass_filter,
-                           Iir::Butterworth::HighPass<filter_order>& highpass_filter,
-                           float sample) {
+float ECG_filtering(Iir::RBJ::IIRNotch& notch_filter,
+                        Iir::Butterworth::LowPass<filter_order>& lowpass_filter,
+                        Iir::Butterworth::HighPass<filter_order>& highpass_filter,
+                            float sample) {
 
     float filtered_sample_hp = highpass_filter.filter(sample);
-    return bandpass_filter.filter(filtered_sample_hp);
+    filtered_sample_hp = lowpass_filter.filter(filtered_sample_hp);
+    return notch_filter.filter(filtered_sample_hp);
 }
 
 float calculate_heart_rate(const std::vector<int>& peak_indices) {
@@ -96,17 +99,6 @@ float calculate_hrv(const std::vector<float>& RR_intervals) {
     scaled_hrv = std::clamp(scaled_hrv, 0.0f, 100.0f); // Enforce bounds
     return rmssd;
 }
-/*
- for rmssd values
-    13–48 ms —  healthy adults aged 38–42 years
-    35–107 ms — elite athletes
-    53.5–82 ms — healthy men
-    40.5–71 ms — men
-    29–65 ms — women
-    23–72 ms — men
-    22–79 ms — women
-    */
-
 
 void display_buffer(const std::vector<float>& buffer, int head) {
   for (int i = 0; i < static_cast<int>(buffer.size()); i++) {
@@ -123,13 +115,17 @@ int main() {
         return 1;
     }
 
-    // Butterworth bandpass filter for removing EMG / power line noise
-    Iir::Butterworth::BandPass<filter_order> bandpass_filter;
-    bandpass_filter.setup(SAMPLING_RATE, 0.5f, cutoff_frequency);
+    // Notch filter for removing EMG / power line noise
+    Iir::RBJ::IIRNotch notch_filter;
+    notch_filter.setup(SAMPLING_RATE, cutoff_frequency);
 
     // Butterworth high-pass filter for baseline wander removal
     Iir::Butterworth::HighPass<filter_order> highpass_filter;
     highpass_filter.setup(SAMPLING_RATE, highpass_cutoff_frequency);
+
+    // Butterworth low-pass filter for noise removal
+    Iir::Butterworth::LowPass<filter_order> lowpass_filter;
+    lowpass_filter.setup(SAMPLING_RATE, lowpass_cutoff_frequency);
 
 
     std::array<float, BUFFER_SIZE> buffer;
@@ -146,7 +142,7 @@ int main() {
     for (int i = 0; i < n_readings; i++) {
         float raw_sample = ecg_data[i]; // simulated ADS1115 reading is received
 
-        float filtered_sample = HighPassThenBandpass(bandpass_filter, highpass_filter, raw_sample);
+        float filtered_sample = ECG_filtering(notch_filter, lowpass_filter, highpass_filter, raw_sample);
 
 
         buffer[head] = filtered_sample;
@@ -186,3 +182,15 @@ int main() {
     }
     return 0;
 }
+
+
+/*
+ for rmssd values
+    13–48 ms —  healthy adults aged 38–42 years
+    35–107 ms — elite athletes
+    53.5–82 ms — healthy men
+    40.5–71 ms — men
+    29–65 ms — women
+    23–72 ms — men
+    22–79 ms — women
+    */
