@@ -7,6 +7,14 @@
 #include <cmath>
 #include <numeric>
 #include <algorithm>
+#include <ads1115.hpp>
+
+class ADS1115Reader : public ADS1115 {
+	virtual void hasSample(float v) {
+		float raw_sample = v;
+	}
+};
+
 
 // simulated sampling params
 const int SAMPLING_RATE = 1000; // Hz
@@ -111,7 +119,7 @@ void display_buffer(const std::vector<float>& buffer, int head) {
 
 int main() {
 
-    if (!read_ecg_data("../../data/ecg_jamie.dat")) {
+    if (!read_ecg_data("../../data/ECG_1000Hz_7.dat")) {
         return 1;
     }
 

@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
 
-TEST(ECG_ProcessingTest, BasicStructure) {
+TEST(ecgTest, BasicStructure) {
   // This test doesn't actually interact with any functionality,
   // but it verifies that your header files can be included 
   // and compilation works as expected.
